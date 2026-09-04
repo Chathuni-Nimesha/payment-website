@@ -1,26 +1,107 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f5f5f2;
+  --surface: #ffffff;
+  --foreground: #111111;
+  --muted: #5c5c57;
+  --border: #e6e6e0;
+  --accent: #1e4a86;
+  --accent-hover: #173a6b;
+  --danger: #b42318;
+  --danger-soft: #fef3f2;
+  --success: #176b45;
+  --success-soft: #ecf8f2;
+  --warning: #9a6700;
+  --warning-soft: #fff8eb;
+  --processing: #1e4a86;
+  --processing-soft: #eef3f8;
+  --shadow-card: 0 1px 2px rgb(17 17 17 / 0.04), 0 10px 28px rgb(17 17 17 / 0.04);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --motion: 160ms;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-processing: var(--processing);
+  --color-processing-soft: var(--processing-soft);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  min-height: 100%;
+  overflow-x: clip;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  overflow-wrap: break-word;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 18%, white);
+  color: var(--foreground);
+}
+
+@keyframes northline-confirm {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes northline-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.confirm-mark {
+  animation: northline-confirm var(--motion) ease-out;
+}
+
+.skeleton-pulse {
+  animation: northline-pulse 1.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .confirm-mark,
+  .skeleton-pulse,
+  .animate-spin {
+    animation: none !important;
+  }
 }
