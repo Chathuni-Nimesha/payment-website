@@ -1,8 +1,17 @@
 import { createPaymentIntent } from "@/lib/payments/create-intent";
+import {
+  limitCreateIntentByIdentity,
+  limitCreateIntentByIp,
+} from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
+  const ipLimit = await limitCreateIntentByIp(request);
+  if (!ipLimit.ok) {
+    return ipLimit.response;
+  }
+
   let body: unknown;
 
   try {
@@ -22,6 +31,12 @@ export async function POST(request: Request) {
   }
 
   const payload = body as Record<string, unknown>;
+  const email = typeof payload.email === "string" ? payload.email : undefined;
+  const identityLimit = await limitCreateIntentByIdentity(request, email);
+  if (!identityLimit.ok) {
+    return identityLimit.response;
+  }
+
   const result = await createPaymentIntent({
     amount: payload.amount,
     currency: payload.currency,

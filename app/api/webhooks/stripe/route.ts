@@ -12,9 +12,10 @@ import {
 } from "@/lib/stripe/server";
 import { mapPaymentIntentStatus } from "@/lib/stripe/status";
 import { transactionStore } from "@/lib/transactions/store";
-import { createTransactionId } from "@/lib/transactions/reference";
+import { createTransactionId, isTransactionId } from "@/lib/transactions/reference";
 import { majorFromMinor } from "@/lib/money";
 import { isCurrencyCode } from "@/lib/currencies";
+import { limitUnsignedWebhook } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -32,16 +33,27 @@ export async function POST(request: Request) {
   }
 
   const signature = request.headers.get("stripe-signature");
+  const payload = await request.text();
+
   if (!signature) {
+    const unsignedLimit = await limitUnsignedWebhook(request);
+    if (!unsignedLimit.ok) {
+      return unsignedLimit.response;
+    }
+
     return new Response("Missing signature.", { status: 400 });
   }
 
-  const payload = await request.text();
   let event: Stripe.Event;
 
   try {
     event = getStripe().webhooks.constructEvent(payload, signature, secret);
   } catch {
+    const unsignedLimit = await limitUnsignedWebhook(request);
+    if (!unsignedLimit.ok) {
+      return unsignedLimit.response;
+    }
+
     return new Response("Invalid signature.", { status: 400 });
   }
 
@@ -52,36 +64,35 @@ export async function POST(request: Request) {
     event.type === "payment_intent.canceled"
   ) {
     const paymentIntent = event.data.object as Stripe.PaymentIntent;
-    await persistPaymentIntent(paymentIntent);
+    await persistPaymentIntentEvent(event, paymentIntent);
   }
 
   return Response.json({ received: true });
 }
 
-async function persistPaymentIntent(paymentIntent: Stripe.PaymentIntent) {
+async function persistPaymentIntentEvent(
+  event: Stripe.Event,
+  paymentIntent: Stripe.PaymentIntent,
+) {
   const status = mapPaymentIntentStatus(paymentIntent.status);
   const existing = await transactionStore.getByPaymentIntentId(paymentIntent.id);
-  const now = new Date().toISOString();
   const currency = paymentIntent.currency.toUpperCase();
   const email =
     existing?.email ||
     (typeof paymentIntent.receipt_email === "string"
       ? paymentIntent.receipt_email
       : "");
-
-  if (existing) {
-    await transactionStore.update(existing.id, { status });
-    return;
-  }
-
   const referenceFromMetadata = paymentIntent.metadata?.northline_reference;
-  const id =
-    referenceFromMetadata && referenceFromMetadata !== "pending"
+  const reference =
+    existing?.id ||
+    (referenceFromMetadata && isTransactionId(referenceFromMetadata)
       ? referenceFromMetadata
-      : createTransactionId();
+      : createTransactionId());
 
-  await transactionStore.create({
-    id,
+  await transactionStore.applyPaymentIntentEvent({
+    eventId: event.id,
+    eventType: event.type,
+    eventCreatedAt: new Date(event.created * 1000),
     paymentIntentId: paymentIntent.id,
     amountMinor: paymentIntent.amount,
     amountMajor: isCurrencyCode(currency)
@@ -90,7 +101,6 @@ async function persistPaymentIntent(paymentIntent: Stripe.PaymentIntent) {
     currency,
     email,
     status,
-    createdAt: now,
-    updatedAt: now,
+    reference,
   });
 }

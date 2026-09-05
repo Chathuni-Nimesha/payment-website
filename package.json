@@ -6,12 +6,18 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint app components lib"
+    "lint": "eslint app components lib tests",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:db": "vitest run tests/store.test.ts tests/store.postgres.test.ts tests/webhook.events.test.ts tests/rate-limit.postgres.test.ts",
+    "db:migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
     "@stripe/react-stripe-js": "^6.8.2",
     "@stripe/stripe-js": "^9.15.0",
     "next": "16.2.6",
+    "pg": "^8.23.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",
@@ -20,11 +26,15 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^3.2.4",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
+    "happy-dom": "^18.0.1",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4"
   }
 }
