@@ -52,9 +52,10 @@ describeWithDatabase("PostgreSQL transaction store", () => {
       amountMinor: 2500,
       amountMajor: "25.00",
       currency: "USD",
-      email: "client@example.com",
-      status: "pending",
-    });
+    email: "client@example.com",
+    status: "pending",
+  });
+  expect(stored?.userId).toBeNull();
     expect(stored?.createdAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
@@ -128,6 +129,114 @@ describeWithDatabase("PostgreSQL transaction store", () => {
     await expect(
       transactionStore.getByPaymentIntentId("pi_missing"),
     ).resolves.toBeNull();
+  });
+
+  it("creates guest transactions without a user and lists only a user's payments", async () => {
+    const { createUserWithSession } = await import("@/lib/auth/store");
+    const owner = await createUserWithSession({
+      email: "owner@example.com",
+      password: "longenough1",
+    });
+    const other = await createUserWithSession({
+      email: "other@example.com",
+      password: "longenough1",
+    });
+    if (!owner.ok || !other.ok) {
+      throw new Error("Could not create test users.");
+    }
+
+    await transactionStore.create(
+      makeTransaction({
+        id: "nl_bbbbbbbbbbbbbbbbbbbbbbbb",
+        paymentIntentId: "pi_owned_newer",
+        userId: owner.user.id,
+      }),
+    );
+    await transactionStore.create(
+      makeTransaction({
+        id: "nl_cccccccccccccccccccccccc",
+        paymentIntentId: "pi_owned_older",
+        userId: owner.user.id,
+        amountMinor: 1000,
+        amountMajor: "10.00",
+      }),
+    );
+    await transactionStore.create(
+      makeTransaction({
+        id: "nl_dddddddddddddddddddddddd",
+        paymentIntentId: "pi_other_user",
+        userId: other.user.id,
+      }),
+    );
+    await transactionStore.create(
+      makeTransaction({
+        id: "nl_eeeeeeeeeeeeeeeeeeeeeeee",
+        paymentIntentId: "pi_guest_row",
+        userId: null,
+      }),
+    );
+
+    const firstPage = await transactionStore.listByUser(owner.user.id, {
+      page: 1,
+      pageSize: 1,
+    });
+    expect(firstPage.total).toBe(2);
+    expect(firstPage.items).toHaveLength(1);
+    expect(firstPage.items[0]?.id).toBe("nl_cccccccccccccccccccccccc");
+    expect(firstPage.items.every((item) => item.userId === owner.user.id)).toBe(
+      true,
+    );
+
+    const secondPage = await transactionStore.listByUser(owner.user.id, {
+      page: 2,
+      pageSize: 1,
+    });
+    expect(secondPage.items[0]?.id).toBe("nl_bbbbbbbbbbbbbbbbbbbbbbbb");
+
+    const otherList = await transactionStore.listByUser(other.user.id);
+    expect(otherList.total).toBe(1);
+    expect(otherList.items[0]?.id).toBe("nl_dddddddddddddddddddddddd");
+  });
+
+  it("attaches a user only when the transaction is still unsigned", async () => {
+    const { createUserWithSession } = await import("@/lib/auth/store");
+    const owner = await createUserWithSession({
+      email: "first-owner@example.com",
+      password: "longenough1",
+    });
+    const other = await createUserWithSession({
+      email: "second-owner@example.com",
+      password: "longenough1",
+    });
+    if (!owner.ok || !other.ok) {
+      throw new Error("Could not create test users.");
+    }
+
+    await transactionStore.create(
+      makeTransaction({
+        id: "nl_ffffffffffffffffffffffff",
+        paymentIntentId: "pi_attach_guest",
+        userId: null,
+      }),
+    );
+
+    await expect(
+      transactionStore.attachUserIfUnset(
+        "nl_ffffffffffffffffffffffff",
+        owner.user.id,
+      ),
+    ).resolves.toMatchObject({ userId: owner.user.id });
+
+    await expect(
+      transactionStore.attachUserIfUnset(
+        "nl_ffffffffffffffffffffffff",
+        other.user.id,
+      ),
+    ).resolves.toBeNull();
+
+    await expect(
+      transactionStore.getById("nl_ffffffffffffffffffffffff"),
+    ).resolves.toMatchObject({ userId: owner.user.id });
   });
 });
 

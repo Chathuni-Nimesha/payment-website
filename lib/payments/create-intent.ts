@@ -5,10 +5,12 @@ import { publicIntentCreationError } from "@/lib/stripe/errors";
 import { stripeSecretConfigError } from "@/lib/stripe/messages";
 import { getStripe, readStripeSecretKey } from "@/lib/stripe/server";
 import { mapPaymentIntentStatus } from "@/lib/stripe/status";
+import { isUserId } from "@/lib/auth/ids";
 import { createTransactionId } from "@/lib/transactions/reference";
 import { transactionStore } from "@/lib/transactions/store";
 import type { Transaction, TransactionStatus } from "@/lib/transactions/types";
 import { majorFromMinor, parseAmount } from "@/lib/money";
+import { logger } from "@/lib/logging/logger";
 import { validateCheckoutFields } from "@/lib/validation";
 
 export type CreateIntentResult =
@@ -40,6 +42,7 @@ export async function createPaymentIntent(input: {
   currency: unknown;
   email: unknown;
   idempotencyKey: unknown;
+  userId?: string | null;
 }): Promise<CreateIntentResult> {
   if (typeof input.idempotencyKey !== "string" || !isIdempotencyKey(input.idempotencyKey)) {
     return {
@@ -139,6 +142,8 @@ export async function createPaymentIntent(input: {
       };
     }
 
+    const ownerId = input.userId && isUserId(input.userId) ? input.userId : null;
+
     const transaction: Transaction = {
       id: existing?.id ?? storedReference,
       paymentIntentId: paymentIntent.id,
@@ -147,6 +152,7 @@ export async function createPaymentIntent(input: {
       currency,
       email: validated.value.email,
       status: intentStatus,
+      userId: existing?.userId ?? ownerId,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };
@@ -158,6 +164,10 @@ export async function createPaymentIntent(input: {
       });
     } else {
       await transactionStore.create(transaction);
+    }
+
+    if (ownerId) {
+      await transactionStore.attachUserIfUnset(transaction.id, ownerId);
     }
 
     if (intentStatus === "paid") {
@@ -183,6 +193,7 @@ export async function createPaymentIntent(input: {
       intentStatus,
     };
   } catch (error) {
+    logger.error("payments.create_intent_failed");
     return {
       ok: false,
       status: 502,

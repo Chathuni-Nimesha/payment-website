@@ -17,6 +17,7 @@ export function makeTransaction(
     currency: "USD",
     email: "client@example.com",
     status: "pending",
+    userId: null,
     createdAt: now,
     updatedAt: now,
     ...overrides,

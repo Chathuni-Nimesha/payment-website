@@ -1,3 +1,4 @@
+import { getCurrentUser } from "@/lib/auth/session";
 import { createPaymentIntent } from "@/lib/payments/create-intent";
 import {
   limitCreateIntentByIdentity,
@@ -37,11 +38,14 @@ export async function POST(request: Request) {
     return identityLimit.response;
   }
 
+  const user = await getCurrentUser(request);
+
   const result = await createPaymentIntent({
     amount: payload.amount,
     currency: payload.currency,
     email: payload.email,
     idempotencyKey: payload.idempotencyKey,
+    userId: user?.id,
   });
 
   if (!result.ok) {

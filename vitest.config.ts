@@ -8,6 +8,7 @@ export default defineConfig({
     clearMocks: true,
     restoreMocks: true,
     fileParallelism: false,
+    testTimeout: 20_000,
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],

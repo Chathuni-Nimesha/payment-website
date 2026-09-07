@@ -10,6 +10,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Payment unsuccessful",
   description: "The Northline payment was not completed.",
+  robots: { index: false, follow: false },
 };
 
 export default async function FailedPage({

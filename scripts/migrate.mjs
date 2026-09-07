@@ -14,7 +14,15 @@ if (!connectionString) {
   process.exit(1);
 }
 
-const client = new Client({ connectionString });
+function databaseSslEnabled() {
+  const raw = process.env.DATABASE_SSL?.trim().toLowerCase();
+  return raw === "true" || raw === "1" || raw === "require";
+}
+
+const client = new Client({
+  connectionString,
+  ssl: databaseSslEnabled() ? { rejectUnauthorized: true } : undefined,
+});
 
 await client.connect();
 

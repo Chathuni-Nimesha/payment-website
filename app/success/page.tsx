@@ -12,6 +12,7 @@ export const metadata: Metadata = {
   title: "Payment receipt",
   description:
     "Northline payment receipt. Paid status is only shown after Stripe confirms the PaymentIntent.",
+  robots: { index: false, follow: false },
 };
 
 export default async function SuccessPage({

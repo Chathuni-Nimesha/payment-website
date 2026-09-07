@@ -173,8 +173,9 @@ function ConfirmPaymentForm({
           options={{
             layout: "tabs",
             wallets: {
-              applePay: "auto",
-              googlePay: "auto",
+              // Disabled so CSP can stay limited to Stripe.js origins.
+              applePay: "never",
+              googlePay: "never",
             },
           }}
         />

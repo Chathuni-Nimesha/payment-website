@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/payments/create-intent/route";
+import { getCurrentUser } from "@/lib/auth/session";
 import { createPaymentIntent } from "@/lib/payments/create-intent";
 import {
   STRIPE_LIVE_KEYS_DISABLED,
@@ -7,7 +8,7 @@ import {
 } from "@/lib/stripe/messages";
 import * as stripeServer from "@/lib/stripe/server";
 import { transactionStore } from "@/lib/transactions/store";
-import { createIntentBody, jsonRequest, TEST_IDEMPOTENCY_KEY } from "./helpers";
+import { createIntentBody, jsonRequest, makeTransaction, TEST_IDEMPOTENCY_KEY } from "./helpers";
 
 vi.mock("@/lib/stripe/server", () => ({
   readStripeSecretKey: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock("@/lib/transactions/store", () => ({
   transactionStore: {
     create: vi.fn(),
     update: vi.fn(),
+    attachUserIfUnset: vi.fn(),
     getById: vi.fn(),
     getByPaymentIntentId: vi.fn(),
   },
@@ -29,8 +31,13 @@ vi.mock("@/lib/rate-limit", () => ({
   limitCreateIntentByIdentity: vi.fn(async () => ({ ok: true })),
 }));
 
+vi.mock("@/lib/auth/session", () => ({
+  getCurrentUser: vi.fn(async () => null),
+}));
+
 const readStripeSecretKey = vi.mocked(stripeServer.readStripeSecretKey);
 const getStripe = vi.mocked(stripeServer.getStripe);
+const currentUser = vi.mocked(getCurrentUser);
 
 function mockRequiresActionIntent(overrides: Record<string, unknown> = {}) {
   return {
@@ -48,8 +55,11 @@ describe("POST /api/payments/create-intent", () => {
   beforeEach(() => {
     readStripeSecretKey.mockReturnValue({ status: "missing" });
     getStripe.mockReset();
+    currentUser.mockReset();
+    currentUser.mockResolvedValue(null);
     transactionStore.create.mockReset();
     transactionStore.update.mockReset();
+    transactionStore.attachUserIfUnset.mockReset();
     transactionStore.getById.mockReset();
     transactionStore.getByPaymentIntentId.mockResolvedValue(null);
   });
@@ -221,12 +231,109 @@ describe("POST /api/payments/create-intent", () => {
       { idempotencyKey: TEST_IDEMPOTENCY_KEY },
     );
   });
+
+  it("associates a signed-in user with a new PaymentIntent", async () => {
+    currentUser.mockResolvedValue({
+      id: "usr_aaaaaaaaaaaaaaaaaaaaaaaa",
+      email: "owner@example.com",
+      createdAt: "2026-01-15T12:00:00.000Z",
+    });
+    readStripeSecretKey.mockReturnValue({
+      status: "ready",
+      key: "sk_test_placeholder",
+    });
+    getStripe.mockReturnValue({
+      paymentIntents: { create: vi.fn().mockResolvedValue(mockRequiresActionIntent()) },
+    });
+    transactionStore.create.mockResolvedValue(undefined);
+
+    const response = await POST(
+      jsonRequest(
+        "http://localhost/api/payments/create-intent",
+        createIntentBody({ userId: "usr_bbbbbbbbbbbbbbbbbbbbbbbb" }),
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(transactionStore.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "usr_aaaaaaaaaaaaaaaaaaaaaaaa",
+      }),
+    );
+    expect(transactionStore.attachUserIfUnset).toHaveBeenCalledWith(
+      "nl_aaaaaaaaaaaaaaaaaaaaaaaa",
+      "usr_aaaaaaaaaaaaaaaaaaaaaaaa",
+    );
+  });
+
+  it("keeps guest checkout unowned and ignores a body userId", async () => {
+    readStripeSecretKey.mockReturnValue({
+      status: "ready",
+      key: "sk_test_placeholder",
+    });
+    getStripe.mockReturnValue({
+      paymentIntents: { create: vi.fn().mockResolvedValue(mockRequiresActionIntent()) },
+    });
+    transactionStore.create.mockResolvedValue(undefined);
+
+    const response = await POST(
+      jsonRequest(
+        "http://localhost/api/payments/create-intent",
+        createIntentBody({ userId: "usr_bbbbbbbbbbbbbbbbbbbbbbbb" }),
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(transactionStore.create).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: null }),
+    );
+    expect(transactionStore.attachUserIfUnset).not.toHaveBeenCalled();
+  });
+
+  it("claims a previously guest PaymentIntent for the signed-in user only", async () => {
+    currentUser.mockResolvedValue({
+      id: "usr_aaaaaaaaaaaaaaaaaaaaaaaa",
+      email: "owner@example.com",
+      createdAt: "2026-01-15T12:00:00.000Z",
+    });
+    readStripeSecretKey.mockReturnValue({
+      status: "ready",
+      key: "sk_test_placeholder",
+    });
+    getStripe.mockReturnValue({
+      paymentIntents: { create: vi.fn().mockResolvedValue(mockRequiresActionIntent()) },
+    });
+    transactionStore.getByPaymentIntentId.mockResolvedValue(
+      makeTransaction({ userId: null }),
+    );
+    transactionStore.update.mockResolvedValue(
+      makeTransaction({ userId: null }),
+    );
+    transactionStore.attachUserIfUnset.mockResolvedValue(
+      makeTransaction({ userId: "usr_aaaaaaaaaaaaaaaaaaaaaaaa" }),
+    );
+
+    const response = await POST(
+      jsonRequest(
+        "http://localhost/api/payments/create-intent",
+        createIntentBody({ userId: "usr_bbbbbbbbbbbbbbbbbbbbbbbb" }),
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(transactionStore.create).not.toHaveBeenCalled();
+    expect(transactionStore.attachUserIfUnset).toHaveBeenCalledWith(
+      "nl_aaaaaaaaaaaaaaaaaaaaaaaa",
+      "usr_aaaaaaaaaaaaaaaaaaaaaaaa",
+    );
+  });
 });
 
 describe("createPaymentIntent mismatch protection", () => {
   beforeEach(() => {
     transactionStore.create.mockReset();
     transactionStore.update.mockReset();
+    transactionStore.attachUserIfUnset.mockReset();
     transactionStore.getById.mockResolvedValue(null);
     transactionStore.getByPaymentIntentId.mockResolvedValue(null);
   });

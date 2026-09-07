@@ -33,7 +33,7 @@ export function migrateTestDatabase(url: string) {
 export async function resetTestDatabase() {
   const pool = getPool();
   await pool.query(
-    "TRUNCATE stripe_events, transactions, rate_limit_windows",
+    "TRUNCATE stripe_events, transactions, rate_limit_windows, sessions, auth_tokens, users",
   );
 }
 

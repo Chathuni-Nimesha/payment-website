@@ -10,10 +10,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:db": "vitest run tests/store.test.ts tests/store.postgres.test.ts tests/webhook.events.test.ts tests/rate-limit.postgres.test.ts",
+    "test:db": "vitest run tests/store.test.ts tests/store.postgres.test.ts tests/webhook.events.test.ts tests/rate-limit.postgres.test.ts tests/auth.postgres.test.ts tests/auth.test.ts tests/payments.history.postgres.test.ts tests/payments.list.test.ts tests/auth.rate-limit.postgres.test.ts tests/auth.rate-limit.routes.test.ts tests/health.postgres.test.ts tests/auth.recovery.postgres.test.ts tests/auth.recovery.test.ts tests/auth.recovery.routes.test.ts",
     "db:migrate": "node scripts/migrate.mjs"
   },
   "dependencies": {
+    "@node-rs/argon2": "^2.2.0",
     "@stripe/react-stripe-js": "^6.8.2",
     "@stripe/stripe-js": "^9.15.0",
     "next": "16.2.6",

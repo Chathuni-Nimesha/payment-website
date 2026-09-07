@@ -15,6 +15,7 @@ import { transactionStore } from "@/lib/transactions/store";
 import { createTransactionId, isTransactionId } from "@/lib/transactions/reference";
 import { majorFromMinor } from "@/lib/money";
 import { isCurrencyCode } from "@/lib/currencies";
+import { logger } from "@/lib/logging/logger";
 import { limitUnsignedWebhook } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -64,7 +65,12 @@ export async function POST(request: Request) {
     event.type === "payment_intent.canceled"
   ) {
     const paymentIntent = event.data.object as Stripe.PaymentIntent;
-    await persistPaymentIntentEvent(event, paymentIntent);
+    try {
+      await persistPaymentIntentEvent(event, paymentIntent);
+    } catch {
+      logger.error("payments.webhook_persist_failed", { type: event.type });
+      return new Response("Webhook handler failed.", { status: 500 });
+    }
   }
 
   return Response.json({ received: true });
